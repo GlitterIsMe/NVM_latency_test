@@ -1,14 +1,20 @@
 #include <iostream>
 #include <string>
 #include <chrono>
-#include <libpmem>
+#include <cstring>
+#include "libpmem.h"
 
-const uint64_t WRITE_CACHELINE_NUM = 1024;
+#define CLFLUSH
+
+const uint64_t WRITE_CACHELINE_NUM = 1024 * 1024;
 const uint64_t CACHELINE_SIZE = 64;
 const uint64_t TEST_SIZE = WRITE_CACHELINE_NUM * CACHELINE_SIZE + 1024;
-const std::string NVM_PATH = "/pmem0/zyw_test/";
+const std::string NVM_PATH = "/pmem0/zyw_test/test";
 
-const uint WRITE_SIZE = 8;
+const uint WRITE_SIZE = 64;
+
+static uint64_t write_latency = 0;
+static uint64_t CPU_FREQ_MHZ = 2100;
 
 static inline void cpu_pause() {
     __asm__ volatile ("pause" ::: "memory");
@@ -30,10 +36,10 @@ static inline void mfence() {
 
 static inline void clflush(char *data, int len, bool front, bool back)
 {
-    volatile char *ptr = (char *)((unsigned long)data &~(CACHE_LINE_SIZE-1));
+    volatile char *ptr = (char *)((unsigned long)data &~(CACHELINE_SIZE-1));
     if (front)
         mfence();
-    for(; ptr<data+len; ptr+=CACHE_LINE_SIZE){
+    for(; ptr<data+len; ptr+=CACHELINE_SIZE){
         unsigned long etsc = read_tsc() + (unsigned long)(write_latency*CPU_FREQ_MHZ/1000);
 #ifdef CLFLUSH
         asm volatile("clflush %0" : "+m" (*(volatile char *)ptr));
@@ -49,12 +55,12 @@ static inline void clflush(char *data, int len, bool front, bool back)
 }
 
 int main() {
-    bool is_pmem = false;
+    int is_pmem = false;
     uint64_t mapped_len = 0;
-    char* raw = pmem_map_file(NVM_PATH.c_str(), TEST_SIZE, PMEM_FILE_CREATE, 0, &mapped_len, &is_pmem);
+    char* raw = (char*)pmem_map_file(NVM_PATH.c_str(), TEST_SIZE, PMEM_FILE_CREATE, 0, &mapped_len, &is_pmem);
     if (!is_pmem || mapped_len == 0) {
         std::cout << "map file error\n";
-        exit -1;
+        exit(-1);
     }
 
     auto start = std::chrono::high_resolution_clock::now();
@@ -66,6 +72,6 @@ int main() {
     auto end = std::chrono::high_resolution_clock::now();
     float elapse = std::chrono::duration<float>(end - start).count();
     std::cout << "FINISH, used [" << elapse <<"]" << std::endl;
-    pmem_unmap(NVM_PATH.c_str(), mapped_len);
+    pmem_unmap(raw, mapped_len);
     return 0;
 }
