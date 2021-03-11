@@ -10,8 +10,10 @@ const uint64_t WRITE_TIMES = 1024 * 1024;
 const uint64_t CACHELINE_SIZE = 64;
 const std::string NVM_PATH = "/pmem0/zyw_test/test";
 
-const uint WRITE_SIZE = 1 * CACHELINE_SIZE;
-const uint64_t TEST_SIZE = WRITE_SIZE * WRITE_TIMES + 1024;
+const uint WRITE_SIZE = 16 * CACHELINE_SIZE;
+//const uint WRITE_SIZE = 8;
+const uint CL_NUM = 1;
+const uint64_t TEST_SIZE = CL_NUM * CACHELINE_SIZE * WRITE_TIMES + 1024;
 
 static uint64_t write_latency = 0;
 static uint64_t CPU_FREQ_MHZ = 2100;
@@ -43,9 +45,9 @@ static inline void clflush(char *data, int len, bool front, bool back)
         unsigned long etsc = read_tsc() + (unsigned long)(write_latency*CPU_FREQ_MHZ/1000);
 #ifdef CLFLUSH
         asm volatile("clflush %0" : "+m" (*(volatile char *)ptr));
-#elif CLFLUSH_OPT
+#elif defined(CLFLUSH_OPT)
         asm volatile(".byte 0x66; clflush %0" : "+m" (*(volatile char *)(ptr)));
-#elif CLWB
+#elif defined(CLWB)
         asm volatile(".byte 0x66; xsaveopt %0" : "+m" (*(volatile char *)(ptr)));
 #endif
         while(read_tsc() < etsc) cpu_pause();
@@ -69,8 +71,8 @@ int main(int argc, char** argv) {
     auto start = std::chrono::high_resolution_clock::now();
     for(int i = 0; i < WRITE_TIMES; i++) {
         char buf[WRITE_SIZE];
-        memcpy(raw + i * WRITE_SIZE, buf, WRITE_SIZE);
-        clflush(raw + i * WRITE_SIZE, WRITE_SIZE, true, true);
+        memcpy(raw + i * CL_NUM * CACHELINE_SIZE, buf, WRITE_SIZE);
+        clflush(raw + i * CL_NUM * CACHELINE_SIZE, WRITE_SIZE, true, true);
     }
     auto end = std::chrono::high_resolution_clock::now();
     float elapse = std::chrono::duration<float>(end - start).count();
