@@ -54,7 +54,10 @@ static inline void clflush(char *data, int len, bool front, bool back)
         mfence();
 }
 
-int main() {
+int main(int argc, char** argv) {
+    int write_times = atoi(argv[1]);
+    printf("write %d cachelines\n", write_times);
+
     int is_pmem = false;
     uint64_t mapped_len = 0;
     char* raw = (char*)pmem_map_file(NVM_PATH.c_str(), TEST_SIZE, PMEM_FILE_CREATE, 0, &mapped_len, &is_pmem);
